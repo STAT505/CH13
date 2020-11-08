@@ -1,0 +1,157 @@
+---
+title: "CH 13: Logistic Regression"
+output: pdf_document
+---
+
+\renewcommand{\vec}[1]{\mathbf{#1}}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 4, fig.width = 6, fig.align = 'center')
+library(tidyverse) 
+library(rstanarm)
+library(rstantools)
+set.seed(11062020)
+```
+
+### Motivation
+
+Let's assume that we have access to the underlying candy face off data. 
+
+\vfill
+
+Consider the following model:
+
+$$y_i = \beta_0 + \beta_1 x_i + \epsilon_i$$
+\vfill
+
+\vfill
+
+__Q:__ What issues might we have with this model?
+
+\vfill
+
+__Q:__ What are some possible solutions?
+
+\vfill
+
+\newpage
+
+Logistic regression is a special case of 
+
+\vfill
+
+### Logistic Regression
+
+The logistic function maps an input from the unit range (0,1) to the real line:
+
+$$logit(x) = \log \left(\frac{x}{1-x}\right)$$
+
+\vfill
+
+
+
+\vfill
+
+The `qlogis` (for logit) and `plogis` (inverse-logit) functions in R can be used for this calculation. For instance `plogis(1) =` `r plogis(1)`.
+
+\vfill
+
+Formally, the inverse-logistic function is used as part of the GLM:
+
+\vfill
+\vfill
+
+\newpage
+
+Recall the `beer` dataset, but now instead of trying to model consumption, lets consider whether a day is a weekday or weekend.
+
+```{r, message = F}
+beer <- read_csv('http://math.montana.edu/ahoegh/Data/Brazil_cerveja.csv') %>% mutate(consumed = consumed - mean(consumed))
+```
+
+
+```{r, message = F}
+beer %>% ggplot(aes(y = weekend, x = consumed)) + 
+  geom_point(alpha = .1) + 
+  geom_smooth(formula = 'y~x', method = 'lm', se =F) + 
+  geom_smooth(formula = 'y~x', method = 'loess', color = 'red', se = F) + 
+  geom_rug() + ggtitle('Weekend vs. Consumption: comparing lm and loess') + 
+  theme_bw() + xlab('Difference in consumption from average daily consumption (L)')
+```
+\vfill
+
+```{r}
+bayes_logistic <- stan_glm(weekend ~ consumed, data = beer,
+                           family = binomial(link = "logit"), refresh = 0)
+```
+
+\vfill
+
+```{r}
+freq_logistic <- glm(weekend ~ consumed, data = beer,
+                           family = binomial(link = "logit"))
+```
+
+\vfill
+
+\newpage
+
+Now how to  interpret the model coefficients? 
+
+```{r}
+bayes_logistic
+```
+\vfill
+```{r}
+summary(freq_logistic)
+```
+
+\newpage
+
+Interpreting the coefficients can be challenging due to the non-linear relationship between the outcome and the predictors. 
+
+### Predictive interpretation
+
+One way to interpret the coefficients is in a predictive standpoint.  For instance, consider an day with average consumption, then the probability of a weekend would be `invlogit(-1.2 + 0.3 * 0) =` `r round(plogis(-1.2),2)`, where as the probability of a day with 10 more liters of consumption (relative to an average day) would have a weekend probability of `invlogit(-1.2 + 0.3 * 10) =` `r round(plogis(-1.2 + 0.3 * 10),2)`
+
+\vfill
+
+Of course, we should always think about uncertainty, so we can extract simulations from the model. 
+
+\vfill
+
+`posterior_linpred` was useful with regression
+```{r}
+new_data <- data.frame(consumed = c(0,10))
+posterior_sims <- posterior_linpred(bayes_logistic, newdata = new_data)
+summary(posterior_sims)
+```
+
+\vfill
+
+```{r}
+posterior_sims <- posterior_epred(bayes_logistic, newdata = new_data)
+summary(posterior_sims)
+```
+
+\newpage
+
+It can also be useful to consider predictions of an individual data point.
+
+```{r}
+new_obs <- posterior_predict(bayes_logistic, newdata = new_data)
+head(new_obs)
+colMeans(new_obs)
+```
+
+### Model Comparison
+
+We can use cross validation in the same manner a standard linear models.
+
+```{r}
+loo(bayes_logistic)
+
+temp_model <- stan_glm(weekend~max_tmp, data = beer, refresh=0)
+loo(temp_model)
+```
+
